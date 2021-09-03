@@ -6,6 +6,11 @@ import { createStore } from 'redux';
 import { Provider, connect } from 'react-redux';
 import './index.css';
 
+//Bind keyboard presses to specific action types
+document.addEventListener('keypress', value => {
+  store.dispatch({type: value.key});
+});
+
 //Function called when user clicks on +,-,x,/,=
 const finishOperation = (state, actionType) => {
   //Create copy of state
@@ -13,31 +18,37 @@ const finishOperation = (state, actionType) => {
 
   //If an operation has not been chosen before, this is the first time
   if (tmp.opValue == null) {
-    tmp.totalValue = parseInt(tmp.value);
+    tmp.totalValue = parseFloat(tmp.value);
   } else {
       //If opValue variable is not null, an operation was selected and will be carried out.
       switch(tmp.opValue) {
         case '+':
-          tmp.totalValue = tmp.totalValue + parseInt(tmp.value);
+          tmp.totalValue = tmp.totalValue + parseFloat(tmp.value);
           break;
         case '-': 
-          tmp.totalValue = tmp.totalValue - parseInt(tmp.value);
+          tmp.totalValue = tmp.totalValue - parseFloat(tmp.value);
           break;
         case 'x':
-          tmp.totalValue = tmp.totalValue * parseInt(tmp.value)
+        case '*':
+          tmp.totalValue = tmp.totalValue * parseFloat(tmp.value)
           break;
         case '÷':
-          tmp.totalValue = tmp.totalValue / parseInt(tmp.value);
+        case '/':
+          tmp.totalValue = tmp.totalValue / parseFloat(tmp.value);
+          break;
       }
   }
 
   //If the user clicked on the '=' button...
-  if (actionType === '=') {
+  if (actionType === '=' || actionType === 'Enter') {
     //The calc's display shows the totalValue variable from the store
     tmp.value = tmp.totalValue.toString();
 
     //The chain of operations (opValue variable) reverts to null
     tmp.opValue = null;
+
+    //Below variable set to false so that new number clicked clears the display
+    tmp.isNewValue = false;
   } else {
     //User must have clicked on +,-,x,/, so the redux store is alerted
     tmp.opValue = actionType;
@@ -54,6 +65,8 @@ const initialState = {
   value: '0', //Value displayed
   totalValue: 0, //Value that math is performed on when using +,-,x,/
   opValue: null, //The current operation being performed
+  isNewValue: true, //If false, a number entered will clear display
+  copyPasteHidden: true //Controls the value copy interface
 };
 
 //Our redux reducer
@@ -63,9 +76,17 @@ const opReducer = (state = initialState, action) => {
 
   //If user clicks on a number, that number gets appended to the calc's displayed value
   if (!isNaN(action.type)) {
-    tmp.value = tmp.value + action.type;
-    if (tmp.value[0] === '0') { //Beginning of a non-zero number should not be zero
-      tmp.value = tmp.value.slice(1);
+    if (tmp.value.length < 13) {
+      //If the = button was just clicked, we want to refresh the calc's state
+      if (!tmp.isNewValue && tmp.opValue == null) {
+        tmp.value = '0';
+        tmp.totalValue = 0;
+        tmp.isNewValue = true;
+      }
+      tmp.value = tmp.value + action.type;
+      if (tmp.value[0] === '0') { //Beginning of a non-zero number should not be zero
+        tmp.value = tmp.value.slice(1);
+      }
     }
 
     return tmp;
@@ -73,19 +94,23 @@ const opReducer = (state = initialState, action) => {
 
   switch(action.type) {
     //This switch statement handles clicks on all non-number buttons
+    //Also handles keyboard presses
 
     //If operational button clicked, handle it with the operational function
     case '+':
     case '-':
     case 'x':
+    case '*':
     case '÷':
+    case '/':
     case '=':
+    case 'Enter':
       tmp = finishOperation(tmp, action.type);
       break;
 
     //Percent button converts the displayed value to a 'percentage' by dividing it by 100
     case '%':
-      tmp.value = (parseInt(tmp.value) / 100).toString();
+      tmp.value = (parseFloat(tmp.value) / 100).toString();
       break;
 
     //Backspace function removes the last character of the calc's displayed value
@@ -100,28 +125,35 @@ const opReducer = (state = initialState, action) => {
     
     //Clear entry and the total value; a clean slate
     case 'C':
+    case 'c':
       tmp.value = '0';
       tmp.totalValue = 0;
     break;
 
     //Finds the reciprocal of the displayed value
     case '1/x':
-      tmp.value = (1 / parseInt(tmp.value)).toString();
+      tmp.value = (1 / parseFloat(tmp.value)).toString();
       break;
 
     //Squares the displayed value
     case 'x²':
-      tmp.value = (Math.pow(parseInt(tmp.value), 2)).toString();
+      tmp.value = (Math.pow(parseFloat(tmp.value), 2)).toString();
+
+      //Handles too many numbers after decimal point
+      const hyphenIndex = tmp.value.indexOf('-');
+      if (hyphenIndex !== -1 && hyphenIndex !== 0) {
+        tmp.value = tmp.value.slice(hyphenIndex - 1);
+      }
       break;
 
     //Finds square root of displayed value
     case '√x':
-      tmp.value = (Math.sqrt(parseInt(tmp.value))).toString();
+      tmp.value = (Math.sqrt(parseFloat(tmp.value))).toString();
       break;
 
     //Changes signs of the displayed value
     case '+/-':
-      tmp.value = (parseInt(tmp.value) * -1).toString();
+      tmp.value = (parseFloat(tmp.value) * -1).toString();
       break;
     
     //Appends a decimal point to the displayed value for floating-point arithmetic
@@ -131,6 +163,11 @@ const opReducer = (state = initialState, action) => {
         tmp.value = tmp.value + '.';
       }
     break;
+
+    //Shows or hides the copy-value interface
+    case 'copyUI':
+      tmp.copyPasteHidden = !tmp.copyPasteHidden;
+      break;
     
     //Default case for store initialization
     default:
@@ -177,6 +214,7 @@ class Frame extends React.Component {
 
     return (
       <div id="calc-container">
+        <NumSelectConnect />
         <div id="calc-back">
           <div id="calc-frame">
             <DisplayContainer />
@@ -221,14 +259,15 @@ const actionCreator = action => {
 //Maps state.value to any component that needs it
 const mapStateToProps = state => {
   return {
-    value: state.value
+    value: state.value,
+    copyPasteHidden: state.copyPasteHidden
   };
 };
 
 //Maps the dispatch to all calc buttons
 const mapDispatchButton = dispatch => {
   return {
-    submitAddNumber: (num) => {
+    storeDispatch: (num) => {
       dispatch(actionCreator(num));
     }
   };
@@ -271,8 +310,15 @@ class Button extends React.Component {
     //Color goes back to how it was when the button was hovered
     this.setState({color: '#FF988D'});
 
+    if (this.props.label === 'Copy') {
+      navigator.clipboard.writeText(this.props.value);
+      this.props.storeDispatch('copyUI');
+    } else if (this.props.label === 'Cancel') {
+      this.props.storeDispatch('copyUI');
+    }
+
     //Dispatch the label of the button to the redux store
-    this.props.submitAddNumber(this.props.label);
+    this.props.storeDispatch(this.props.label);
   }
 
   render() {
@@ -292,17 +338,72 @@ const ButtonContainer = connect(mapStateToProps, mapDispatchButton)(Button);
 class Display extends React.Component {
   constructor(props) {
     super(props);
+
+    this.state = {
+      color: '#FFFFFF'
+    };
+
+    this.handleMouseOver = this.handleMouseOver.bind(this);
+    this.handleMouseOut = this.handleMouseOut.bind(this);
+    this.handleMouseDown = this.handleMouseDown.bind(this);
+    this.handleClick = this.handleClick.bind(this);
+  }
+
+  handleMouseOver() {
+    this.setState({color: '#F7F7F7'});
+  }
+  handleMouseOut() {
+    this.setState({color: '#FFFFFF'});
+  }
+  handleMouseDown() {
+    this.setState({color: '#EDEDED'});
+  }
+  
+  handleClick() {
+    this.setState({color: '#F7F7F7'});
+
+    this.props.storeDispatch('copyUI');
   }
 
   render() {
     return (
-      <div id="display" className="calc-button" >{this.props.value}</div>
+      <div id="display" className="calc-button" style={{backgroundColor: this.state.color}} 
+      onClick={this.handleClick} onMouseOver={this.handleMouseOver}
+      onMouseOut={this.handleMouseOut} onMouseDown={this.handleMouseDown}>
+      {this.props.value}</div>
     );
   }
 }
 
+class NumSelect extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.handleClick = this.handleClick.bind(this);
+  }
+
+  handleClick() {
+    console.log('tits');
+  }
+
+  render() {
+    if (!this.props.copyPasteHidden) {
+      return (
+        <div id="copy-paste">
+          <ButtonContainer label="Copy" />
+          <ButtonContainer label="Cancel" />
+        </div>
+      );
+    } else {
+      return null;
+    }
+  }
+}
+
+const NumSelectConnect = connect(mapStateToProps, mapDispatchButton)(NumSelect);
+
 //Connects the calc's display to the redux store
-const DisplayContainer = connect(mapStateToProps)(Display);
+const DisplayContainer = connect(mapStateToProps, mapDispatchButton)(Display);
 
 //And, finally, we render our component
 ReactDOM.render(

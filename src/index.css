@@ -41,9 +41,16 @@
   font-family: Cabin, monospace;
   font-weight: bold;
   font-size: 30px;
-  padding: 5px;
+  padding: 14px;
 }
 
 .calc-button:hover {
   cursor: pointer;
+}
+
+#copy-paste {
+  border-style: solid;
+  border-color: #EDEDED;
+  border-width: 4px;
+  margin-right: 5px;
 }
