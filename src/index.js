@@ -3,11 +3,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { createStore } from 'redux';
-import { Provider } from 'react-redux';
-import { Container } from './components/Container';
 import { opReducer } from './reducers';
+import { App } from './components/App.js';
 import './index.css';
 export { initialState };
+export { store };
 
 //The initial state for the redux store
 const initialState = {
@@ -25,25 +25,6 @@ document.addEventListener('keypress', value => {
 
 //Initialization of redux store
 const store = createStore(opReducer);
-
-//Parent component with redux provider
-class App extends React.Component {
-  constructor(props) {
-    super(props);
-  }
-
-  render() {
-    return (
-      <Provider store={store}>
-        <div>
-          <link href="https://fonts.googleapis.com/css?family=Montserrat" rel="stylesheet" />
-          <link href="https://fonts.googleapis.com/css?family=Cabin" rel="stylesheet" />
-            <Container store={store} />
-        </div>
-      </Provider>
-    );
-  }
-}
 
 //Render our parent component
 ReactDOM.render(
